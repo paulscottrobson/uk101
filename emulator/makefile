@@ -1,5 +1,5 @@
 #OBJS specifies which files to compile as part of the project
-OBJS = framework\main.cpp framework\gfx.cpp framework\debugger.cpp sys_processor.cpp sys_debug_uk101.cpp 
+OBJS = framework\main.cpp framework\gfx.cpp framework\debugger.cpp sys_processor.cpp sys_debug_superboard.cpp hardware.cpp
 #CC specifies which compiler we're using
 CC = g++
 
@@ -18,7 +18,7 @@ COMPILER_FLAGS = -DINCLUDE_DEBUGGING_SUPPORT -DWINDOWS
 LINKER_FLAGS = -lmingw32 -lSDL2main -lSDL2
 
 #OBJ_NAME specifies the name of our exectuable
-OBJ_NAME = uk101.exe
+OBJ_NAME = sb2.exe
 
 #This is the target that compiles our executable
 all : $(OBJS)

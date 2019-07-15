@@ -3,16 +3,16 @@
 //
 //		Name:		sys_processor.c
 //		Purpose:	Processor Emulation.
-//		Created:	20th October 2015
+//		Created:	15th July 2019
 //		Author:		Paul Robson (paul@robsons.org.uk)
 //
 // *******************************************************************************************************************************
 // *******************************************************************************************************************************
 
 #include <stdio.h>
-
 #include "sys_processor.h"
 #include "sys_debug_system.h"
+#include "hardware.h"
 
 // *******************************************************************************************************************************
 //														   Timing
@@ -40,16 +40,16 @@ static LONG32 cycles;																// Cycle Count.
 #define Read(a) 	_Read(a)														// Basic Read
 #define Write(a,d)	_Write(a,d)														// Basic Write
 
-#define Cycles(n) 	cycles += (n)													// Bump Cycles
-#define Fetch() 	_Read(pc++)														// Fetch byte
-#define FetchWord()	{ temp16 = Fetch();temp16 |= (Fetch() << 8); }					// Fetch word
-
 #define ReadWord(a) (Read(a) | ((Read((a)+1) << 8)))								// Read 16 bit, Basic
 
-//	These are optimised for page 0 and page 1
-#define ReadWord01(a) ReadWord(a)													// Read 16 bit, page 0/1 
-#define Read01(a) 	Read(a)															// Read 8 bit, page 0/1
-#define Write01(a,d) Write(a,d)														// Write 8 bit, page 0/1
+#define ReadWord01(a) (ramMemory[a]+(ramMemory[(a+1)] << 8))						// Read 16 bit, page 0/1 
+#define Read01(a) 	(ramMemory[a])													// Read 8 bit, page 0/1
+#define Write01(a,d) { ramMemory[a] = (d); }										// Write 8 bit, page 0/1
+
+#define Cycles(n) 	cycles += (n)													// Bump Cycles
+
+#define Fetch() 	_Read(pc++)														// Fetch byte
+#define FetchWord()	{ temp16 = Fetch();temp16 |= (Fetch() << 8); }					// Fetch word
 
 static inline BYTE8 _Read(WORD16 address);											// Need to be forward defined as 
 static inline void _Write(WORD16 address,BYTE8 data);								// used in support functions.
@@ -60,17 +60,24 @@ static inline void _Write(WORD16 address,BYTE8 data);								// used in support 
 //											   Read and Write Inline Functions
 // *******************************************************************************************************************************
 
-static BYTE8 currentKeyPending = 0;
-
 static inline BYTE8 _Read(WORD16 address) {
 	return ramMemory[address];							
 }
 
 static inline void _Write(WORD16 address,BYTE8 data) {
-	if (address < 0xA000) ramMemory[address] = data;
-	if (address >= 0xD000 && address < 0xD800) ramMemory[address] = data;
+	if (address < 0x8000) {
+		ramMemory[address] = data;
+		return; 
+	}
+	if (address >= 0xD000 && address <= 0xD800) {
+		if (ramMemory[address] != data) {
+			ramMemory[address] = data;
+			HWWriteDisplay(address,data);
+		}	
+		return;
+	}
 	if (address == 0xDF00) {
-		ramMemory[0xDF00] = CPUWriteKeyboard(data);
+		ramMemory[0xDF00] = HWWriteKeyboard(data);
 	}
 }
 
@@ -81,10 +88,33 @@ static inline void _Write(WORD16 address,BYTE8 data) {
 #include "basic_rom.inc"
 #include "monitor_rom.inc"
 
+#ifdef INCLUDE_DEBUGGING_SUPPORT
+static void CPULoadChunk(FILE *f,BYTE8* memory,int count);
+#endif
+
+#ifdef ESP32
+void CPUExit(void) {}
+#endif
+
 void CPUReset(void) {
-	for (int i = 0;i < 2048;i++) ramMemory[0xF800+i] = monitor_rom[i];
+	for (int i = 0xD000;i < 0xD400;i++) Write(i,i & 0xFF); 							// Junk on screen
+	HWReset();																		// Reset Hardware
+	for (int i = 0;i < 2048;i++) ramMemory[0xF800+i] = monitor_rom[i];				// Copy ROM images in
 	for (int i = 0;i < 8192;i++) ramMemory[0xA000+i] = basic_rom[i];
-	resetProcessor();
+
+	#ifdef INCLUDE_DEBUGGING_SUPPORT 												// In Debug versions can
+	FILE *f = fopen("monitor.rom","rb"); 											// read in new ROMs if in
+	if (f != NULL) {																// current directory.
+		CPULoadChunk(f,ramMemory+0xF800,0x800);
+		fclose(f);
+	}
+	f = fopen("basic.rom","rb");
+	if (f != NULL) {
+		CPULoadChunk(f,ramMemory+0xA000,0x2000);
+		fclose(f);
+	}
+	#endif
+	resetProcessor();																// Reset CPU
 }
 
 // *******************************************************************************************************************************
@@ -98,78 +128,8 @@ BYTE8 CPUExecuteInstruction(void) {
 	}
 	if (cycles < CYCLES_PER_FRAME) return 0;										// Not completed a frame.
 	cycles = cycles - CYCLES_PER_FRAME;												// Adjust this frame rate.
+	HWSync();																		// Update any hardware
 	return FRAME_RATE;																// Return frame rate.
-}
-
-
-// *******************************************************************************************************************************
-//												Get time in ms (windows only)
-// *******************************************************************************************************************************
-
-#include "gfx.h"
-LONG32 SYSMilliseconds(void) {
-	return GFXTimer();
-}
-
-// *******************************************************************************************************************************
-//											Access keyboard
-// *******************************************************************************************************************************
-
-static const BYTE8 keyboardMap[] = {
-	'1','2','3','4','5','6','7',0,
-	'8','9','0','\'','-',GFXKEY_BACKSPACE,0,0,
-	'.','L','O',0,GFXKEY_RETURN,0,0,0,
-	'W','E','R','T','Y','U','I',0,
-	'S','D','F','G','H','J','K',0,
-	'X','C','V','B','N','M',',',0,
-	'Q','A','Z',' ','/',':','P',0,
-	GFXKEY_F11,GFXKEY_CONTROL,GFXKEY_F12,0,0,GFXKEY_LSHIFT,GFXKEY_RSHIFT,0
-
-};
-
-BYTE8 CPUWriteKeyboard(BYTE8 pattern) {
-	pattern = pattern ^ 0xFF;
-	BYTE8 outPattern = 0x00;
-	for (BYTE8 row = 0;row < 8;row++) {
-		if ((pattern & (0x80 >> row)) != 0) {
-			for (BYTE8 col = 0;col < 8;col++) {
-				if (GFXIsKeyPressed(keyboardMap[row*8+col])) {
-					outPattern = outPattern | (0x80 >> col);
-				}
-			}
-		}
-	}
-	if ((pattern & 0x01) && (!GFXIsKeyPressed(GFXKEY_LSHIFT))) {
-		outPattern |= 1;
-	}
-	outPattern = outPattern ^ 0xFF;
-	return outPattern;
-}
-
-#ifdef INCLUDE_DEBUGGING_SUPPORT
-
-// *******************************************************************************************************************************
-//		Execute chunk of code, to either of two break points or frame-out, return non-zero frame rate on frame, breakpoint 0
-// *******************************************************************************************************************************
-
-BYTE8 CPUExecute(WORD16 breakPoint1,WORD16 breakPoint2) { 
-	BYTE8 next;
-	do {
-		BYTE8 r = CPUExecuteInstruction();											// Execute an instruction
-		if (r != 0) return r; 														// Frame out.
-		next = CPUReadMemory(pc);
-	} while (pc != breakPoint1 && pc != breakPoint2 && next != 0x02);				// Stop on breakpoint or NOP
-	return 0; 
-}
-
-// *******************************************************************************************************************************
-//									Return address of breakpoint for step-over, or 0 if N/A
-// *******************************************************************************************************************************
-
-WORD16 CPUGetStepOverBreakpoint(void) {
-	BYTE8 opcode = CPUReadMemory(pc);												// Current opcode.
-	if (opcode == 0x20) return (pc+3) & 0xFFFF;										// Step over JSR.
-	return 0;																		// Do a normal single step
 }
 
 // *******************************************************************************************************************************
@@ -184,6 +144,35 @@ void CPUWriteMemory(WORD16 address,BYTE8 data) {
 	Write(address,data);
 }
 
+
+#ifdef INCLUDE_DEBUGGING_SUPPORT
+
+#include "gfx.h"
+
+// *******************************************************************************************************************************
+//		Execute chunk of code, to either of two break points or frame-out, return non-zero frame rate on frame, breakpoint 0
+// *******************************************************************************************************************************
+
+BYTE8 CPUExecute(WORD16 breakPoint1,WORD16 breakPoint2) { 
+	BYTE8 next;
+	do {
+		BYTE8 r = CPUExecuteInstruction();											// Execute an instruction
+		if (r != 0) return r; 														// Frame out.
+		next = CPUReadMemory(pc);
+	} while (pc != breakPoint1 && pc != breakPoint2 && next != 0x03);				// Stop on breakpoint or $03 break
+	return 0; 
+}
+
+// *******************************************************************************************************************************
+//									Return address of breakpoint for step-over, or 0 if N/A
+// *******************************************************************************************************************************
+
+WORD16 CPUGetStepOverBreakpoint(void) {
+	BYTE8 opcode = CPUReadMemory(pc);												// Current opcode.
+	if (opcode == 0x20) return (pc+3) & 0xFFFF;										// Step over JSR.
+	return 0;																		// Do a normal single step
+}
+
 void CPUEndRun(void) {
 	FILE *f = fopen("memory.dump","wb");
 	fwrite(ramMemory,1,RAMSIZE,f);
@@ -194,7 +183,7 @@ void CPUExit(void) {
 	GFXExit();
 }
 
-static void _CPULoadChunk(FILE *f,BYTE8* memory,int count) {
+static void CPULoadChunk(FILE *f,BYTE8* memory,int count) {
 	while (count != 0) {
 		int qty = (count > 4096) ? 4096 : count;
 		fread(memory,1,qty,f);
@@ -204,17 +193,16 @@ static void _CPULoadChunk(FILE *f,BYTE8* memory,int count) {
 }
 void CPULoadBinary(char *fileName) {
 	FILE *f = fopen(fileName,"rb");
-	_CPULoadChunk(f,ramMemory,RAMSIZE);
-	fclose(f);
-	resetProcessor();
+	if (f != NULL) {
+		CPULoadChunk(f,ramMemory,RAMSIZE);
+		fclose(f);
+		resetProcessor();
+	}
 }
-#endif
 
 // *******************************************************************************************************************************
 //											Retrieve a snapshot of the processor
 // *******************************************************************************************************************************
-
-#ifdef INCLUDE_DEBUGGING_SUPPORT
 
 static CPUSTATUS st;																	// Status area
 

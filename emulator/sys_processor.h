@@ -1,9 +1,9 @@
 // *******************************************************************************************************************************
 // *******************************************************************************************************************************
 //
-//		Name:		processor.h
+//		Name:		sys_processor.h
 //		Purpose:	Processor Emulation (header)
-//		Created:	20th October 2015
+//		Created:	15th July 2019
 //		Author:		Paul Robson (paul@robsons.org.uk)
 //
 // *******************************************************************************************************************************
@@ -24,7 +24,6 @@ typedef unsigned int   LONG32;														// 32 bit type.
 
 void CPUReset(void);
 BYTE8 CPUExecuteInstruction(void);
-LONG32 SYSMilliseconds(void);
 BYTE8 CPUWriteKeyboard(BYTE8 pattern);
 
 #ifdef INCLUDE_DEBUGGING_SUPPORT													// Only required for debugging

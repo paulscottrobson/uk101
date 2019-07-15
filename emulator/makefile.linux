@@ -1,4 +1,4 @@
-SOURCES = framework/main.cpp framework/gfx.cpp framework/debugger.cpp sys_processor.cpp sys_debug_uk101.cpp
+SOURCES = framework/main.cpp framework/gfx.cpp framework/debugger.cpp sys_processor.cpp sys_debug_uk101.cpp hardware.cpp
 APPNAME = uk101
 
 CC = g++

@@ -3,7 +3,7 @@
 //
 //		Name:		sys_debug_superboard.c
 //		Purpose:	Debugger Code (System Dependent)
-//		Created:	20th October 2015
+//		Created:	12th July 2019
 //		Author:		Paul Robson (paul@robsons->org.uk)
 //
 // *******************************************************************************************************************************
@@ -94,38 +94,38 @@ void DBGXRender(int *address,int showDisplay) {
 
 	int xs = 48;
 	int ys = 16;
-
 	if (showDisplay) {
 		renderCount++;
 		int size = 2;
 		int x1 = WIN_WIDTH/2-xs*size*8/2;
-		int y1 = WIN_HEIGHT/2-ys*size*8*2/2;
+		int y1 = WIN_HEIGHT/2-ys*size*16/2;
 		int cursorPos = 0;
 		SDL_Rect r;
-		int b = 16;
-		r.x = x1-b;r.y = y1-b;r.w = xs*size*8+b*2;r.h=ys*size*2*8+b*2;
+		int b = 8;
+		r.x = x1-b;r.y = y1-b;r.w = xs*size*8+b*2;r.h=ys*size*16+b*2;
 		GFXRectangle(&r,0xFFFF);
 		b = b - 4;
-		r.x = x1-b;r.y = y1-b;r.w = xs*size*8+b*2;r.h=ys*size*2*8+b*2;
+		r.x = x1-b;r.y = y1-b;r.w = xs*size*8+b*2;r.h=ys*size*16+b*2;
 		GFXRectangle(&r,0);
 		for (int x = 0;x < xs;x++) 
 		{
 			for (int y = 0;y < ys;y++)
 		 	{
-		 		int ch = CPUReadMemory(0xD000+x+13+y*64);
+		 		int ch = CPUReadMemory(0xD00C+x+y*64);
 		 		ch = ch & 0xFF;
 		 		int xc = x1 + x * 8 * size;
-		 		int yc = y1 + y * 2 * 8 * size;
+		 		int yc = y1 + y * 16 * size;
 		 		SDL_Rect rc;
 		 		int cp = ch * 8;
-		 		rc.w = rc.h = size;																// Width and Height of pixel.
+		 		int col = 0xF80;
+		 		rc.w = size;rc.h = size*2;														// Width and Height of pixel.
 		 		for (int x = 0;x < 8;x++) {														// 5 Across
 		 			rc.x = xc + x * size;
-		 			for (int y = 0;y < 16;y++) {													// 7 Down
-		 				int f = character_rom[cp+(y >> 1)];
-		 				rc.y = yc + y * size;
+		 			for (int y = 0;y < 8;y++) {													// 7 Down
+		 				int f = character_rom[cp+y];
+		 				rc.y = yc + y * size * 2;
 		 				if (f & (0x80 >> x)) {		
-		 					GFXRectangle(&rc,0xF80);			
+		 					GFXRectangle(&rc,col);			
 		 				}
 		 			}
 		 		}

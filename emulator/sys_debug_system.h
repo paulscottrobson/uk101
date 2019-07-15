@@ -1,9 +1,9 @@
 // *******************************************************************************************************************************
 // *******************************************************************************************************************************
 //
-//		Name:		debug_system.h
+//		Name:		sys_debug_system.h
 //		Purpose:	Debugger Code (System Dependent) Header
-//		Created:	20th October 2015
+//		Created:	15th July 2019
 //		Author:		Paul Robson (paul@robsons.org.uk)
 //
 // *******************************************************************************************************************************
@@ -15,9 +15,9 @@
 #define _DEBUG_SYS_H
 #include "sys_processor.h"
 
-#define WIN_TITLE 		"65C02 Emulator"											// Initial Window stuff
-#define WIN_WIDTH		(42*8*4)
-#define WIN_HEIGHT		(32*8*4)
+#define WIN_TITLE 		"UK101 Emulator"											// Initial Window stuff
+#define WIN_WIDTH		(32*8*4)
+#define WIN_HEIGHT		(25*8*4)
 #define WIN_BACKCOLOUR	0x004
 
 // *******************************************************************************************************************************
